@@ -1,9 +1,10 @@
-from gpt4all import GPT4All
+from gpt4all import GPT4All, gpt4all
 
 try:
     GPU = GPT4All.list_gpus()[0]
 except Exception as e:
     print("no GPU found lol", e)
+    quit()
 
 model = GPT4All("orca-mini-3b-gguf2-q4_0.gguf", device=GPU)
 
