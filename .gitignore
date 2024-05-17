@@ -1,1 +1,5 @@
 env
+.idea
+*.vim
+__pycache__
+BashVenture
