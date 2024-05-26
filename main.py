@@ -1,11 +1,11 @@
 from gpt4all import GPT4All
 from paramiko.client import SSHClient
 import select
-from prompts import PLAYER_SYSTEM_MESSAGE
+from prompts import PLAYER_SYSTEM_MESSAGE, SYSTEM_PROMPT
 import time
 
-LLM_MODEL = "orca-mini-3b-gguf2-q4_0.gguf"
-
+LLM_MODEL = "nous-hermes-llama2-13b.Q4_0.gguf"
+GAME_COMMANDS = ["n", "s", "e", "w", "u", "h"]
 
 def print_gamestate(master_state, player_state):
     print(f"{master_state.current_chat_session} {player_state.current_chat_session[-1]}")
@@ -35,7 +35,7 @@ def main():
     channel.exec_command('cd BashVenture; ./adventure.sh')
     time.sleep(5)
 
-    vitsi_muuttuja_lol = ''
+    context = ''
 
     while True:
         # readable list, writable list, exception list. Maybe I'll use them...
@@ -43,24 +43,36 @@ def main():
         game_output = ''
         if len(rl) > 0:
             game_output = channel.recv(1024).decode()
-            vitsi_muuttuja_lol += game_output
+            context += game_output
             print(game_output)
 
         else:  # game seems to be waiting for user input!
-            print('lollero', vitsi_muuttuja_lol)
-            if '[ENTER]' in vitsi_muuttuja_lol:
-                print('commence pressing of the enter')
+            print('context:', context)
+            if '[ENTER]' in context:
                 channel.send(b'\n')
                 print('entered enter')
-                vitsi_muuttuja_lol = ''
-            elif '>' in vitsi_muuttuja_lol:
-                print('oh no we must ask LLM FOR HELP!!!!')
-                llm_input = vitsi_muuttuja_lol.split("--- Classic Adventure for Bash ---")[-1].strip()
-                print('lets ask this from our AI friend:', llm_input)
-                with llm_player.chat_session(system_prompt=PLAYER_SYSTEM_MESSAGE):
-                    llm_player.generate(prompt=llm_input)
-                    print('our AI friend said this:', llm_player.current_chat_session[-1])
-
+                context = ''
+            elif '>' in context:
+                llm_input = context.split("--- Classic Adventure for Bash ---")[-1].strip()
+                print('lets ask for help from our AI friend')
+                with llm_player.chat_session(system_prompt=SYSTEM_PROMPT):
+                    game_command = '-'
+                    while True:
+                        llm_player.generate(prompt=llm_input, max_tokens=1)
+                        print('our AI friend said this:', llm_player.current_chat_session[-1]["content"])
+                        #  if not the game will just re-ask
+                        game_command = llm_player.current_chat_session[-1]['content'].strip()
+                        print(game_command)
+                        if game_command.strip() in GAME_COMMANDS:
+                            break
+                        else:
+                            print("AI friend got confused... Trying to reset")
+                            #  hacky way to reset context, it's a hackathon after all
+                            llm_player._history = [{"role": "assistant", "content": SYSTEM_PROMPT}]
+                game_command = f"{game_command}\n"
+                channel.send(bytes(game_command, 'utf-8'))
+                
+                time.sleep(5)
 
 if __name__ == "__main__":
     main()
